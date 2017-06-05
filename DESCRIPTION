@@ -1,0 +1,10 @@
+Package: qpcr
+Title: Package to process qPCR data from Biorad machines
+Version: 0.0.0.9000
+Authors@R: person("Svetlana", "Lebedeva", email = "svetlana_lebedeva@gmail.com", role = c("aut", "cre"))
+Description: This package will take raw Cq values of Biorad qPCR machine. You will need to specify your samples and targets, and the package will produce barplots with fold changes.
+Depends: R (>= 3.2.3)
+License: GNU Open
+Encoding: UTF-8
+LazyData: true
+RoxygenNote: 6.0.1.9000
