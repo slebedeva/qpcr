@@ -1,0 +1,252 @@
+---
+title: "making_package.Rmd"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R make your own package
+
+A brief and useful intro is here:
+https://hilaryparker.com/2014/04/29/writing-an-r-package-from-scratch/
+
+
+```{r}
+setwd("~/work/learning/R/r-package")
+```
+
+### Packages we need:
+
+roxygen2 is for writing documentation.
+
+```{r}
+#install.packages("devtools")
+suppressMessages(library("devtools"))
+#devtools::install_github("klutometis/roxygen")
+suppressMessages(library(roxygen2))
+```
+
+### create package directory:
+
+```{r}
+create("qpcr")
+```
+
+
+We need to edit DESCRIPTION file inside for author info, etc.
+
+
+Add functions: save each as function.R into the R folder.
+
+```{r importqpcr}
+importqpcr <- function(workdir="."){
+  files <- list.files(path = workdir, pattern = ".txt")
+  list_of_tabs <- lapply(1:length(files), function(i){
+    file <- readLines(files[[i]])
+    idx <- which(grepl("Well",file))[2] #Well is mentioned twice, the second one where the table starts
+    file <- file[idx:length(file)]
+    tc <- textConnection(file)
+    processed <- read.table(tc, sep = "\t", dec=".", header=T, blank.lines.skip = TRUE, na.strings = "N/A")
+    tab <- processed
+    close(tc) 
+    tab <- as.data.frame(tab)
+    #typeof(tab$Cq) #check data type #double
+    if( typeof(tab$Cq)!="double" ) stop('Please check your input!')
+    do.call(what = "<-", args = list(paste0("tab", as.character(i)), tab))
+  }) #end of listing subfunction
+} # end of import function
+```
+
+
+### make documentation
+
+```{r}
+document(pkg = "qpcr")
+```
+
+### install!
+
+```{r}
+suppressMessages(install("qpcr"))
+```
+
+### make github repo
+
+```{bash}
+cd  ~/work/learning/R/r-package/qpcr
+git init
+git add
+git add .gitignore
+git commit -m "initial commit"
+#go to github and create repo without readme
+git remote add origin git@github.com:slebedeva/qpcr
+git push -u origin master
+```
+
+After that we can install it like:
+
+```{r}
+install_github('qpcr','slebedeva')
+```
+
+------------------------------------------------------------------------------------------------------
+
+### my original code:
+
+```{r}
+# Analyse qPCR data from BioRad machine (Ohlerlab)
+# Author Sveti
+
+#import data
+setwd("/data/ohler/svetlana/qpcr/20170602_NIL/")
+
+
+
+
+#####needs improvement###############
+importqpcr <- function(workdir="."){
+  files <- list.files(path = workdir, pattern = ".txt")
+  list_of_tabs <- lapply(1:length(files), function(i){
+    file <- readLines(files[[i]])
+    idx <- which(grepl("Well",file))[2] #Well is mentioned twice, the second one where the table starts
+    file <- file[idx:length(file)]
+    tc <- textConnection(file)
+    processed <- read.table(tc, sep = "\t", dec=".", header=T, blank.lines.skip = TRUE, na.strings = "N/A")
+    tab <- processed
+    close(tc) 
+    tab <- as.data.frame(tab)
+    #typeof(tab$Cq) #check data type #double
+    if( typeof(tab$Cq)!="double" ) stop('Please check your input!')
+    do.call(what = "<-", args = list(paste0("tab", as.character(i)), tab))
+  }) #end of listing subfunction
+} # end of import function
+
+tab_list <- importqpcr()
+
+tab <- tab_list[[1]]
+
+# make plots from tab_cl(of the format "Sample, Target, Cq")
+makeplots <- function(tab_cl, norm_gene = "Actin", cal = "mock", cell_type = "hek293"){
+  #mycolors <- c("Gray","darkorange4", "darkorange3","deepskyblue4", "deepskyblue3")
+  #kick out what has Cq=>27 on actin (I don't trust anything else)
+  names_to_keep <- tab_cl[tab_cl$Target=="Actin" & tab_cl$Cq<28, "Sample"]
+  tab_cl <- tab_cl[tab_cl$Sample %in% names_to_keep,]
+  #remove failed samples
+  tab_cl <- tab_cl[which(tab_cl$Cq!="NA"),]
+  ## RQ
+  #we can calculate mean Ct values for both target and sample by listing() two indices in tapply:
+  mean <- as.data.frame(tapply(tab_cl$Cq, list(tab_cl$Target, tab_cl$Sample), mean))
+  mean <- mean[, !apply(mean , 2 , function(x) all(is.na(x)))] #remove rows with NA which were kept because our samples are factors
+  print(mean)
+  sd <- as.data.frame(tapply(tab_cl$Cq, list(tab_cl$Target, tab_cl$Sample), sd))
+  sd <- sd[, !apply(sd , 2 , function(x) all(is.na(x)))]
+  deltaCt <- mean #for now, let's put it into new table
+  # deltaCt is Ct gene - Ct normalizing gene
+  norm_gene <- norm_gene
+  norm_row <- which(grepl(norm_gene, rownames(mean)))
+  for (name in names(mean)) { deltaCt[,paste0("deltaCt.", name)] <- deltaCt[,name] - deltaCt[norm_row,name] }
+  #sd for delta Ct (sd target^2+sd actin^2)^1/2
+  for (name in names(mean)) { deltaCt[,paste0("sd.", name)] <- (sd[,name]^2 + sd[norm_row,name]^2)^0.5 }
+  #RQ + 2^-deltadeltaCt (deltaCt sample - deltaCt calibrator sample)
+  #RQ max and RQ min are calculated as 2^-(deltadeltaCt-sd) and 2^-(deltadeltaCt+sd)
+  #paste your calibrator sample here:
+  cal <- cal
+  RQ <- deltaCt
+  for (name in names(mean)) { RQ[,paste0("RQ.", name)] <- 2^-(RQ[,paste0("deltaCt.", name)] - RQ[,paste0("deltaCt.", cal)]) }
+  for (name in names(mean)) { RQ[,paste0("RQmin.", name)] <- 2^-(RQ[,paste0("deltaCt.", name)] - RQ[,paste0("deltaCt.", cal)] + RQ[,paste0("sd.", name)]) }
+  for (name in names(mean)) { RQ[,paste0("RQmax.", name)] <- 2^-(RQ[,paste0("deltaCt.", name)] - RQ[,paste0("deltaCt.", cal)] - RQ[,paste0("sd.", name)]) }
+  ## Plotting
+  library(ggplot2)
+  samples <- names(mean)
+  #since normalizing gene is always 1, we can remove it for plotting
+  RQact <- RQ[!grepl(norm_gene, rownames(RQ)),]
+  genes <- rownames(RQact)
+  #color up the thing a bit:
+  mycolors <- rainbow(length(genes))
+  genecol <- data.frame(genes, mycolors) #to color by gene
+  row.names(genecol) <- genecol$genes
+  positions <- unique(tab_cl$Sample)#to sort the bars accordingly
+  #actual plots
+  list_of_ggplots <- lapply(1:nrow(RQact), function(i) {
+    rq <- as.data.frame(t(RQact[i,which(grepl("RQ\\.",colnames(RQ)))])) #transpose so that it is easier to plot (choose RQ columns)
+    rownames(rq) <- samples
+    rqmax <- as.data.frame(t(RQact[i,which(grepl("RQmax",colnames(RQ)))]))
+    rqmin <- as.data.frame(t(RQact[i,which(grepl("RQmin",colnames(RQ)))]))
+    n <- cbind(rq,rqmax,rqmin)
+    colnames(n) <- c("rq", "rqmax", "rqmin")
+    n$gene <- rownames(RQact)[i]
+    n$sample <- rownames(n)
+    #do not forget stat="identity"
+    #when inside for loop, you need to explicitly print the ggplot object
+    #ggplot(n[grep("FITC|eIF|lnc", n$sample),], aes(x = sample, y = rq)) +
+    ggplot(n, aes(x = sample, y = rq)) +
+      geom_bar(stat = "identity", fill=genecol$mycolors[i], alpha=.9) +
+      #geom_bar(stat = "identity", fill=c("Black", mycolors, "azure4")) +
+      geom_errorbar(aes(ymin=rqmin, ymax=rqmax), width=.5) +
+      theme_bw() +
+      ggtitle(paste0("qPCR, ", genes[i], ",\n norm to ", norm_gene, ",\n in ", cell_type)) +
+      ylab(paste0("Expression relative to ", cal)) + xlab("") +
+      theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+      scale_x_discrete(limits = positions) +
+      scale_y_log10()
+  })
+  #how to put N plots on one grid:
+  library("gridExtra")
+  #myrow <- ceiling(length(list_of_ggplots)/2)
+  mycol <- ceiling(length(list_of_ggplots)/2)
+  g <- marrangeGrob(list_of_ggplots, ncol=mycol, nrow=2, top = paste0(Sys.Date(),cell_type)) 
+  g
+  ggsave(filename=paste0(Sys.Date(),cell_type,'_plots.png'), g, device = "png", width=8, height=8)
+} #end of make plots function
+
+typeof(tab$Cq) #check data type #double
+tab$Cq[1] #[1] 17.477
+tab$Cq[1]/2 #sanity check that we got numbers #[1] 8.7385 
+head(tab, 1)
+
+#used 2nd half of the plate
+tab_red <- tab[!grepl("0[123456]", tab$Well),]
+
+#fill in targets and samples
+
+tab_red$Target <- c(rep(c(rep("Actin",3), rep("Oct4",3)),2),
+                    rep(c(rep("Gapdh",3), rep("Ngn2",3)),2),
+                    rep(c(rep("Tubb3",3), rep("Isl2",3)),2),
+                    rep(c(rep("Mnx1",3), rep("Slc18a3",3)),2))
+                            
+               
+tab_red <- tab_red[tab_red$Target!="water",]
+
+tab_red$Sample <- c(rep("EB0h",6), rep("EB48h",6))
+
+
+#water controls
+#water <- tab_red[tab$Sample=="noRT",]
+#water$Target <- c("Actin","eIF3B","RP1196H","261335","GPR144AS")
+#View(water)
+#water[,c("Target","Cq")]
+#noRT controls
+#tab_cl <- tab_cl[tab_cl$Sample!="noRT",]
+
+tab_cl <- tab_red[,c("Sample","Target","Cq")]
+
+
+makeplots(tab_cl, norm_gene = "Actin", cal = "EB0h", cell_type = "NIL")
+
+#EB0h    EB48h
+#Actin   21.59667 21.66000
+#Gapdh   18.04333 18.78667
+#Isl2    38.86667 30.40000
+#Mnx1    37.83000 35.85000
+#Ngn2    39.13000 39.79000
+#Oct4    24.75667 29.14333
+#Slc18a3 35.03333 30.96333
+#Tubb3   31.06000 26.81000
+
+
+dev.copy2pdf(file=paste0(Sys.Date(),'NIL_plots.pdf'), width=8, height=8)
+
+```
+
