@@ -5,15 +5,16 @@
 #' @param norm_gene A gene to which to normalize Ct values, normally housekeeping. Defaults to "Actin".
 #' @param cal Your calibrator sample (control sample). In the plot of relative fold changes it will be set to 1. Defaults to "mock".
 #' @param cell_type What cells do you do qpcr from? Needed for the title of your plot. Defaults to "HEK293".
+#' @param qpcrdir Put your directory where to save the plots. Defaults to ".".
 #' @export
 #' @examples 
 #' makeplots()
 
-makeplots <- function(tab_cl, norm_gene = "Actin", cal = "mock", cell_type = "HEK293"){
+makeplots <- function(tab_cl, norm_gene = "Actin", cal = "mock", cell_type = "HEK293", qpcrdir = "."){
   #mycolors <- c("Gray","darkorange4", "darkorange3","deepskyblue4", "deepskyblue3")
   #kick out what has Cq=>27 on actin (I don't trust anything else)
-  names_to_keep <- tab_cl[tab_cl$Target=="Actin" & tab_cl$Cq<28, "Sample"]
-  tab_cl <- tab_cl[tab_cl$Sample %in% names_to_keep,]
+  #names_to_keep <- tab_cl[tab_cl$Target=="Actin" & tab_cl$Cq<28, "Sample"]
+  #tab_cl <- tab_cl[tab_cl$Sample %in% names_to_keep,]
   #remove failed samples
   tab_cl <- tab_cl[which(tab_cl$Cq!="NA"),]
   ## RQ
@@ -61,7 +62,6 @@ makeplots <- function(tab_cl, norm_gene = "Actin", cal = "mock", cell_type = "HE
     n$sample <- rownames(n)
     #do not forget stat="identity"
     #when inside for loop, you need to explicitly print the ggplot object
-    #ggplot(n[grep("FITC|eIF|lnc", n$sample),], aes(x = sample, y = rq)) +
     ggplot(n, aes(x = sample, y = rq)) +
       geom_bar(stat = "identity", fill=genecol$mycolors[i], alpha=.9) +
       #geom_bar(stat = "identity", fill=c("Black", mycolors, "azure4")) +
@@ -75,8 +75,9 @@ makeplots <- function(tab_cl, norm_gene = "Actin", cal = "mock", cell_type = "HE
   })
   #how to put N plots on one grid:
   library("gridExtra")
-  #myrow <- ceiling(length(list_of_ggplots)/2)
-  mycol <- ceiling(length(list_of_ggplots)/2)
-  marrangeGrob(list_of_ggplots, ncol=mycol, nrow=2, top = paste0(Sys.Date(),cell_type)) 
-  #ggsave(filename=paste0(Sys.Date(),cell_type,'_plots.png'), g, device = "png", width=8, height=8)
-} #end of make plots function
+  #myrow <- ceiling(length(list_of_ggplots)/2) #do with square root
+  myn <- ceiling(sqrt(length(list_of_ggplots)))
+  g <- marrangeGrob(list_of_ggplots, ncol=myn, nrow=myn, top = paste0(Sys.Date(),cell_type)) 
+  print(g)
+  ggsave(filename=paste0(Sys.Date(),cell_type,'_plots.png'), g, path=qpcrdir, device = "png", width=10, height=10)
+} #end of make plots function #end of make plots function
