@@ -7,7 +7,7 @@
 #' importqpcr()
  
 importqpcr <- function(workdir="."){
-  files <- list.files(path = workdir, pattern = ".txt")
+  files <- list.files(path = workdir, pattern = ".txt", full.names = TRUE)
   list_of_tabs <- lapply(1:length(files), function(i){
     file <- readLines(files[[i]])
     idx <- which(grepl("Well",file))[2] #Well is mentioned twice, the second one where the table starts
