@@ -1,0 +1,2 @@
+make multiple housekeeping genes (need geometric mean of 2^deltaCt for all these genes, which would be [dCt(gapdh)*dCt(actb)]^1/2
+https://www.researchgate.net/post/How_to_analyze_a_qPCR_with_2_or_3_housekeeping_genes
